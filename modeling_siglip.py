@@ -132,6 +132,29 @@ class SiglipVisoinEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
 
 
+class SiglipVisionEncoder(nn.module):
+    def __init__(self, config: SiglipVisionConfig):
+        super().__init__()
+        self.config = config
+        self.layers = nn.ModuleList(
+            [SiglipVisoinEncoderLayer for _ in config.num_hidden_layers]
+        )
+    
+    def forward(
+            self,
+            inputs_embds: torch.Tensor
+    ) -> torch.Tensor:
+        """Simply pass through all encoder layers."""
+        # [Batch_Size, Num_Patches, Embed_Dim]
+        hidden_states = inputs_embds
+
+        for encoder_layer in self.layers:
+            # [Batch_Size, Num_Patches, Embed_Dim] -> # [Batch_Size, Num_Patches, Embed_Dim]
+            hidden_states = encoder_layer.forward(hidden_states)
+
+        return hidden_states
+
+
 class SiglipVisionTransformer(nn.Module):
     def __init__(self, config: SiglipVisionConfig):
         super().__init__()
