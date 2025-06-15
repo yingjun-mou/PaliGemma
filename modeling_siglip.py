@@ -1,3 +1,5 @@
+"""This module corresponds to the SigLIP vision model portion in Figure 1 of the PaliGemma paper. Source: https://arxiv.org/abs/2407.07726."""
+
 from typing import Optional, Tuple
 import torch # torch-2.7.1
 import torch.nn as nn
