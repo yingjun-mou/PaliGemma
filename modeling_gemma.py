@@ -16,3 +16,11 @@ class PaliGemmaForConditionalGeneration(nn.Module):
         self.language_model = language_model
 
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+
+    def tie_weights(self):
+        """Re-use layer parameters of the initial embedding layer (vocab_sie -> emb_size)
+           in final linaer layer (emb_size -> vocab_size), since these two layers are doing the opossite tranformations.
+           See the Transformer decoder architecture in the "Attention Is All You Need" paper.
+           When the vocab size is large, this re-use can reduce the number of params by 10%.
+        """
+        return self.language_model.tie_weights()
