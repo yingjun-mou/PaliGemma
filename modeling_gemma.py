@@ -4,7 +4,6 @@ from typing import Optional, Tuple, List
 from modeling_siglip import SiglipVisionConfig, SiglipVisionModel
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss
 import math
 
 
@@ -475,7 +474,7 @@ class PaliGemmaForConditionalGeneration(nn.Module):
             input_ids: torch.LongTensor = None,
             pixel_values: torch.FloatTensor = None,
             attention_mask: Optional[torch.Tensor] = None,
-            kv_cache: Optional[KVCahe] = None,
+            kv_cache: Optional[KVCache] = None,
     ) -> Tuple:
         assert torch.all(attention_mask == 1), "The input cannot be padded"
 
