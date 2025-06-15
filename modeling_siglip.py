@@ -32,3 +32,16 @@ class SiglipVisionConfig:
         # While an image encoder transform an image to an embedding, a vision transformer
         # can convert an image into multiple encodings.
         self.num_image_tokens = num_image_tokens
+
+class SiglipVisionModel(nn.Module):
+
+    def __init__(self, config: SiglipVisionConfig):
+        """The SigLIP model contains a config and a vision transformer."""
+        super.__init__()
+        self.config = config
+        self.vision_model = SiglipVisionTransformer(config)
+
+    def forward(self, pixel_values) -> Tuple:
+        "The SigLIP model converts pixel values with the following input and output dimensions."
+        # [Batch_Size, Channels, Height, Width] -> [Batch_Size, Num_Patches, Embeded_Dim]
+        return self.vision_model(pixel_values=pixel_values)
