@@ -1,5 +1,5 @@
 from typing import Optional, Tuple
-import torch
+import torch # torch-2.7.1
 import torch.nn as nn
 
 class SiglipVisionConfig:
@@ -32,6 +32,30 @@ class SiglipVisionConfig:
         # While an image encoder transform an image to an embedding, a vision transformer
         # can convert an image into multiple encodings.
         self.num_image_tokens = num_image_tokens
+
+class SiglipVisionTransformer(nn.Module):
+    def __init__(self, config: SiglipVisionConfig):
+        super().__init__()
+        self.config = config
+        embed_dim = config.hidden_size
+
+        # Extract the embeddings of image patches.
+        self.embeddings = SiglipVisionEmbeddings(config)
+        # Run through a series of transformer layers.
+        self.encoder = SiglipEncoder(config)
+        # Layer normalization.
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        # pixel_values: [Batch_Size, Channels, Height, Width] -> [Batch_Size, Num_Patches, Embed_Dim]
+        hidden_states = self.embeddings(pixel_values)
+
+        last_hidden_state = self.encoder(inputs_embeds=hidden_states)
+
+        last_hidden_state = self.post_layernorm(last_hidden_state)
+
+        return last_hidden_state
+
 
 class SiglipVisionModel(nn.Module):
 
