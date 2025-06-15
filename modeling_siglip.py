@@ -33,6 +33,22 @@ class SiglipVisionConfig:
         # can convert an image into multiple encodings.
         self.num_image_tokens = num_image_tokens
 
+class SiglipVisionEmbeddings(nn.Module):
+    def __init__(self, config: SiglipVisionConfig):
+        super().__init__()
+        self.config = config
+        self.embded_dim = config.hidden_size
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
+
+        self.patch_embedding = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=self.embded_dim,
+            kernel_size=self.patch_size, # i.e. the concolving filter size
+            stride=self.patch_size, # number of cells the filter jumps across
+            padding="valid", # no padding is added
+        )
+
 class SiglipVisionTransformer(nn.Module):
     def __init__(self, config: SiglipVisionConfig):
         super().__init__()
