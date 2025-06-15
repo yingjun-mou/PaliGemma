@@ -33,6 +33,7 @@ class SiglipVisionConfig:
         # can convert an image into multiple encodings.
         self.num_image_tokens = num_image_tokens
 
+
 class SiglipVisionEmbeddings(nn.Module):
     def __init__(self, config: SiglipVisionConfig):
         super().__init__()
@@ -76,6 +77,42 @@ class SiglipVisionEmbeddings(nn.Module):
         embeddings = embeddings + self.position_embedding(self.position_ids)
         # [Batch_Size, Num_Patches, Embed_Dim]
         return embeddings
+
+
+class SiglipVisoinEncoderLayer(nn.Module):
+    def __init__(self, config: SiglipVisionConfig):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.self_attn = SiglipAttention(config)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.mlp = SiglipNLP(config)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+    
+    def forward(
+            self,
+            hidden_states: torch.Tensor
+    ) -> torch.Tensor:
+        """Source: Paper "An Image Is Worth 16x16 Words" - https://arxiv.org/abs/2010.11929.
+        """
+        # residual: [Batch_Size, Num_Patches, Embed_Dim]
+        residual = hidden_states
+        # [Batch_Size, Num_Patches, Embed_Dim] -> [Batch_Size, Num_Patches, Embed_Dim]
+        # Does not change the dimension, just transform it into a Gaussian distribution with 0 mean and 1 variance.
+        hidden_states = self.layer_norm1(hidden_states)
+        # [Batch_Size, Num_Patches, Embed_Dim] -> [Batch_Size, Num_Patches, Embed_Dim]
+        # Does not change the dimension, just add contextualized information.
+        hidden_states, _ = self.self_attn(hidden_states=hidden_states)
+        # [Batch_Size, Num_Patches, Embed_Dim]
+        hidden_states = residual + hidden_states
+        # residual: [Batch_Size, Num_Patches, Embed_Dim] 
+        residual = hidden_states
+        # [Batch_Size, Num_Patches, Embed_Dim] -> [Batch_Size, Num_Patches, Embed_Dim]
+        hidden_states = self.layer_norm2(hidden_states)
+        # [Batch_Size, Num_Patches, Embed_Dim] -> [Batch_Size, Num_Patches, Embed_Dim]
+        hidden_states = self.mlp(hidden_states)
+        # [Batch_Size, Num_Patches, Embed_Dim]
+        hidden_states = residual + hidden_states
+
 
 class SiglipVisionTransformer(nn.Module):
     def __init__(self, config: SiglipVisionConfig):
