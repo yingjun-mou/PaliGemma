@@ -117,3 +117,36 @@ class PaliGemmaForConditionalGeneration(nn.Module):
 
         # Merge the embeddings of the text tokens and the image tokens 
         image_features, attention_mask, position_ids = self._merge_input_ids_with_image_features(image_features, inputs_embds, input_ids, attention_mask, kv_cache)
+    
+    def _merge_input_ids_with_image_features(
+            self, image_features: torch.Tensor, inputs_embeds: torch.Tensor, input_ids: torch.Tensor, attention_mask: torch.Tensor
+    ):
+        _, _, embed_dim = image_features.shape
+        batch_size, sequence_length = input_ids.shape
+        dtype, device = inputs_embeds.dtype, inputs_embeds.device
+        # [Batch_Size, Seq_Len, Hidden_Size]
+        scaled_image_features = image_features / (self.config.hidden_size**0.5)
+
+        # [Batch_Size, Seq_Len]. True for text tokens.
+        text_mask = (input_ids != self.config.image_token_index) & (input_ids != self.config.pad_token_id)
+        # [Batch_Size, Seq_Len]. True for image tokens.
+        image_mask = input_ids == self.config.image_token_index
+        # [Batch_Size, Seq_Len]. True for padding tokens. 
+        pad_mask = input_ids == self.pad_token_id
+
+        # Give a uniform length to the three mask tensors.
+        # unsqueeze(-1): give a new dimension at the end. [N, ] -> [N, 1]
+        # expand(-1, -1, embed_dim): [N, 1] -> [N, 1, embd_dim]. -1 means not changing the dimension.
+        text_mask_expanded = text_mask.unsqueeze(-1).expand(-1, -1, embed_dim)
+        pad_mask_expanded = pad_mask.unsqueeze(-1).expand(-1, -1, embed_dim)
+        image_mask_expanded = image_mask.unsqueeze(-1).expand(-1, -1, embed_dim)
+
+        # Construct the final embedding - the vertical bar in Figure 1 in PaliGemma paper by combing the embeddings of the image tokens, the text tokens and mask out all the padding tokens.
+        final_embedding = torch.zeros(batch_size, sequence_length, embed_dim, dtype=dtype, device=device)
+        # If text_mask_expanded is true(1), copy the inputs_embds, otherwise copy the final embedding(0).
+        final_embedding = torch.where(text_mask_expanded, inputs_embeds, final_embedding)
+        # We cannot use torch.where becahse the seq len of scaled_image_features is different from final_embedding.
+        # masked_scatter: if image_mask_expanded is true(1), copy image_features to final_embedding.
+        final_embedding = torch.masked_scatter(image_mask_expanded, scaled_image_features)
+
+        
