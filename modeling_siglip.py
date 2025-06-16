@@ -166,7 +166,7 @@ class SiglipAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class SiglipVisoinEncoderLayer(nn.Module):
+class SiglipEncoderLayer(nn.Module):
     def __init__(self, config: SiglipVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -206,7 +206,7 @@ class SiglipEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList(
-            [SiglipVisoinEncoderLayer for _ in config.num_hidden_layers]
+            [SiglipEncoderLayer(config) for _ in range(config.num_hidden_layers)]
         )
     
     def forward(
@@ -252,7 +252,7 @@ class SiglipVisionModel(nn.Module):
 
     def __init__(self, config: SiglipVisionConfig):
         """The SigLIP model contains a config and a vision transformer."""
-        super.__init__()
+        super().__init__()
         self.config = config
         self.vision_model = SiglipVisionTransformer(config)
 

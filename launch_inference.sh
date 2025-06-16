@@ -1,6 +1,7 @@
 #!/bin/bash
 
-MODEL_PATH="$HOME/projects/paligemma-weights/paligemma-3b-pt-224"
+# MODEL_PATH="$HOME/projects/paligemma-weights/paligemma-3b-pt-224"
+MODEL_PATH="D:\2_Academics\1_PROJECTS\paligemma-3b-pt-224"
 PROMPT="this building is "
 IMAGE_FILE_PATH="test_images/pic1.jpg"
 MAX_TOKENS_TO_GENERATE=100
