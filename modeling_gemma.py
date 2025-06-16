@@ -82,8 +82,8 @@ class PaliGemmaConfig():
             self,
             vision_config=None, # passed into SigLIP
             text_config=None, # passed into Gemma
-            ignore_index=100,
-            image_token_index=25600, # the index for placholder token <image>
+            ignore_index=-100,
+            image_token_index=256000, # the index for placholder token <image>
             vocab_size=257152,
             projection_dim=2048, # the dimension of image embedding came out of the linear layer
             hidden_size=2048,
@@ -105,7 +105,7 @@ class PaliGemmaConfig():
 
         self.vocab_size = self.text_config.vocab_size
 
-        self.text_config.num_image_tokens = (self.vision_config.image_size // self.vision_config.patch_size)
+        self.text_config.num_image_tokens = (self.vision_config.image_size // self.vision_config.patch_size) ** 2
         self.vision_config.projection_dim = projection_dim
 
 
@@ -501,7 +501,7 @@ class PaliGemmaForConditionalGeneration(nn.Module):
         scaled_image_features = image_features / (self.config.hidden_size**0.5)
 
         # [Batch_Size, Seq_Len]. True for text tokens.
-        text_mask = (input_ids != self.config.image_token_index) & (input_ids != self.config.pad_token_id)
+        text_mask = (input_ids != self.config.image_token_index) & (input_ids != self.pad_token_id)
         # [Batch_Size, Seq_Len]. True for image tokens.
         image_mask = input_ids == self.config.image_token_index
         # [Batch_Size, Seq_Len]. True for padding tokens. 
@@ -520,7 +520,9 @@ class PaliGemmaForConditionalGeneration(nn.Module):
         final_embedding = torch.where(text_mask_expanded, inputs_embeds, final_embedding)
         # We cannot use torch.where becahse the seq len of scaled_image_features is different from final_embedding.
         # masked_scatter: if image_mask_expanded is true(1), copy image_features to final_embedding.
-        final_embedding = torch.masked_scatter(image_mask_expanded, scaled_image_features)
+        final_embedding = final_embedding.masked_scatter(image_mask_expanded, scaled_image_features)
+         # Zero out padding tokens
+        final_embedding = torch.where(pad_mask_expanded, torch.zeros_like(final_embedding), final_embedding)
 
         #### CREATE THE ATTENTION MASK ####
 

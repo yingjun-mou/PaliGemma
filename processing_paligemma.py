@@ -40,7 +40,7 @@ def normalize(
 ) -> np.ndarray:
     mean = np.array(mean, dtype=image.dtype)
     std = np.array(std, dtype=image.dtype)
-    image = (image - mean) /std
+    image = (image - mean) / std
     return image
 
 

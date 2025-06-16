@@ -40,13 +40,13 @@ class SiglipVisionEmbeddings(nn.Module):
     def __init__(self, config: SiglipVisionConfig):
         super().__init__()
         self.config = config
-        self.embded_dim = config.hidden_size
+        self.embed_dim = config.hidden_size
         self.image_size = config.image_size
         self.patch_size = config.patch_size
 
         self.patch_embedding = nn.Conv2d(
             in_channels=config.num_channels,
-            out_channels=self.embded_dim,
+            out_channels=self.embed_dim,
             kernel_size=self.patch_size, # i.e. the concolving filter size
             stride=self.patch_size, # number of cells the filter jumps across
             padding="valid", # no padding is added
@@ -55,7 +55,7 @@ class SiglipVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches
         # Encode the positional info of a patch.
-        self.position_embedding = nn.Embedding(self.num_positions, self.embded_dim)
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         # Save position_ids as a model state but without saving as a parameter because they are not updated during backpropagation.
         self.register_buffer(
             "position_ids",
@@ -200,6 +200,8 @@ class SiglipEncoderLayer(nn.Module):
         # [Batch_Size, Num_Patches, Embed_Dim]
         hidden_states = residual + hidden_states
 
+        return hidden_states
+
 
 class SiglipEncoder(nn.Module):
     def __init__(self, config: SiglipVisionConfig):
@@ -211,15 +213,15 @@ class SiglipEncoder(nn.Module):
     
     def forward(
             self,
-            inputs_embds: torch.Tensor
+            inputs_embeds: torch.Tensor
     ) -> torch.Tensor:
         """Simply pass through all encoder layers."""
         # [Batch_Size, Num_Patches, Embed_Dim]
-        hidden_states = inputs_embds
+        hidden_states = inputs_embeds
 
         for encoder_layer in self.layers:
             # [Batch_Size, Num_Patches, Embed_Dim] -> # [Batch_Size, Num_Patches, Embed_Dim]
-            hidden_states = encoder_layer.forward(hidden_states)
+            hidden_states = encoder_layer(hidden_states)
 
         return hidden_states
 
