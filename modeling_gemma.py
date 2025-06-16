@@ -97,6 +97,7 @@ class PaliGemmaConfig():
         self.projection_dim = projection_dim
         self.hidden_size = hidden_size
         self.vision_config = vision_config
+        self.text_config = text_config
         self.is_encoder_decoder = False
         self.pad_token_id = pad_token_id
 
@@ -468,60 +469,35 @@ class PaliGemmaForConditionalGeneration(nn.Module):
            When the vocab size is large, this re-use can reduce the number of params by 10%.
         """
         return self.language_model.tie_weights()
-    
-    def forwrad(
-            self,
-            input_ids: torch.LongTensor = None,
-            pixel_values: torch.FloatTensor = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            kv_cache: Optional[KVCache] = None,
-    ) -> Tuple:
-        assert torch.all(attention_mask == 1), "The input cannot be padded"
 
-        # 1. Extract the input embeddings
-        # (Batch_Size, Seq_Len, Hidden_Size)
-        inputs_embds = self.language_model.get_input_embeddings()(input_ids)
-
-        # 2. Merge text and images
-        # [Batch_Size, Channels, Height, Width] -> [Batch_Size, Num_Patches, Embed_Dim]
-        selected_image_feature = self.vision_tower(pixel_values.to(inputs_embds.dtype))
-        # [Batch_Size, Num_Patches, Embed_Dim] -> [Batch_Size, Num_Patches, Hidden_Size]
-        image_features = self.multi_modal_projector(selected_image_feature)
-
-        # Merge the embeddings of the text tokens and the image tokens 
-        image_features, attention_mask, position_ids = self._merge_input_ids_with_image_features(image_features, inputs_embds, input_ids, attention_mask, kv_cache)
-    
     def _merge_input_ids_with_image_features(
-            self, image_features: torch.Tensor, inputs_embeds: torch.Tensor, input_ids: torch.Tensor, attention_mask: torch.Tensor, kv_cache: Optional[KVCache] = None
+        self, image_features: torch.Tensor, inputs_embeds: torch.Tensor, input_ids: torch.Tensor, attention_mask: torch.Tensor, kv_cache: Optional[KVCache] = None
     ):
         _, _, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
         dtype, device = inputs_embeds.dtype, inputs_embeds.device
-        # [Batch_Size, Seq_Len, Hidden_Size]
+        # Shape: [Batch_Size, Seq_Len, Hidden_Size]
         scaled_image_features = image_features / (self.config.hidden_size**0.5)
-
-        # [Batch_Size, Seq_Len]. True for text tokens.
+    
+        # Combine the embeddings of the image tokens, the text tokens and mask out all the padding tokens.
+        final_embedding = torch.zeros(batch_size, sequence_length, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device)
+        # Shape: [Batch_Size, Seq_Len]. True for text tokens
         text_mask = (input_ids != self.config.image_token_index) & (input_ids != self.pad_token_id)
-        # [Batch_Size, Seq_Len]. True for image tokens.
+        # Shape: [Batch_Size, Seq_Len]. True for image tokens
         image_mask = input_ids == self.config.image_token_index
-        # [Batch_Size, Seq_Len]. True for padding tokens. 
+        # Shape: [Batch_Size, Seq_Len]. True for padding tokens
         pad_mask = input_ids == self.pad_token_id
 
-        # Give a uniform length to the three mask tensors.
-        # unsqueeze(-1): give a new dimension at the end. [N, ] -> [N, 1]
-        # expand(-1, -1, embed_dim): [N, 1] -> [N, 1, embd_dim]. -1 means not changing the dimension.
+        # We need to expand the masks to the embedding dimension otherwise we can't use them in torch.where
         text_mask_expanded = text_mask.unsqueeze(-1).expand(-1, -1, embed_dim)
         pad_mask_expanded = pad_mask.unsqueeze(-1).expand(-1, -1, embed_dim)
         image_mask_expanded = image_mask.unsqueeze(-1).expand(-1, -1, embed_dim)
 
-        # Construct the final embedding - the vertical bar in Figure 1 in PaliGemma paper by combing the embeddings of the image tokens, the text tokens and mask out all the padding tokens.
-        final_embedding = torch.zeros(batch_size, sequence_length, embed_dim, dtype=dtype, device=device)
-        # If text_mask_expanded is true(1), copy the inputs_embds, otherwise copy the final embedding(0).
+        # Add the text embeddings
         final_embedding = torch.where(text_mask_expanded, inputs_embeds, final_embedding)
-        # We cannot use torch.where becahse the seq len of scaled_image_features is different from final_embedding.
-        # masked_scatter: if image_mask_expanded is true(1), copy image_features to final_embedding.
+        # Insert image embeddings. We can't use torch.where because the sequence length of scaled_image_features is not equal to the sequence length of the final embedding
         final_embedding = final_embedding.masked_scatter(image_mask_expanded, scaled_image_features)
-         # Zero out padding tokens
+        # Zero out padding tokens
         final_embedding = torch.where(pad_mask_expanded, torch.zeros_like(final_embedding), final_embedding)
 
         #### CREATE THE ATTENTION MASK ####
@@ -561,3 +537,34 @@ class PaliGemmaForConditionalGeneration(nn.Module):
             position_ids = (attention_mask.cumsum(-1)).masked_fill_((attention_mask == 0), 1).to(device)
 
         return final_embedding, causal_mask, position_ids
+
+    def forward(
+            self,
+            input_ids: torch.LongTensor = None,
+            pixel_values: torch.FloatTensor = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            kv_cache: Optional[KVCache] = None,
+    ) -> Tuple:
+        assert torch.all(attention_mask == 1), "The input cannot be padded"
+
+        # 1. Extract the input embeddings
+        # (Batch_Size, Seq_Len, Hidden_Size)
+        inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
+
+        # 2. Merge text and images
+        # [Batch_Size, Channels, Height, Width] -> [Batch_Size, Num_Patches, Embed_Dim]
+        selected_image_feature = self.vision_tower(pixel_values.to(inputs_embeds.dtype))
+        # [Batch_Size, Num_Patches, Embed_Dim] -> [Batch_Size, Num_Patches, Hidden_Size]
+        image_features = self.multi_modal_projector(selected_image_feature)
+
+        # Merge the embeddings of the text tokens and the image tokens 
+        inputs_embeds, attention_mask, position_ids = self._merge_input_ids_with_image_features(image_features, inputs_embeds, input_ids, attention_mask, kv_cache)
+        
+        outputs = self.language_model(
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            kv_cache=kv_cache,
+        )
+
+        return outputs
