@@ -201,7 +201,7 @@ class SiglipVisoinEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
 
 
-class SiglipVisionEncoder(nn.module):
+class SiglipEncoder(nn.Module):
     def __init__(self, config: SiglipVisionConfig):
         super().__init__()
         self.config = config
